@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>QR Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #07070f;
+    --surface: #0f0f1c;
+    --border: rgba(255,255,255,0.08);
+    --accent: #a78bfa;
+    --accent2: #38bdf8;
+    --green: #4ade80;
+    --warn: #f87171;
+    --text: #f0f0f8;
+    --muted: #5a5a7a;
+  }
+
+  html, body {
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px 20px;
+    gap: 0;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(167,139,250,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 80% 90%, rgba(56,189,248,0.07) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+
+  .header h1 {
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(120deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header p {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ── CARD ── */
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  /* ── DROP ZONE ── */
+  .drop-zone {
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .drop-zone:hover { background: rgba(167,139,250,0.04); }
+  .drop-zone.drag-over { background: rgba(167,139,250,0.1); }
+
+  #fileInput {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-icon {
+    width: 64px; height: 64px;
+    border: 2px dashed rgba(167,139,250,0.4);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .drop-zone:hover .drop-icon {
+    border-color: var(--accent);
+    transform: scale(1.05);
+  }
+
+  .drop-label {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text);
+  }
+
+  .drop-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* Preview thumbnail */
+  .preview-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  #previewImg {
+    width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    display: none;
+    background: #000;
+  }
+
+  .preview-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  /* ── SCAN FRAME on image ── */
+  .img-frame {
+    width: 54%;
+    aspect-ratio: 1;
+    position: relative;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .img-frame.show { opacity: 1; }
+
+  .img-corner {
+    position: absolute;
+    width: 22px; height: 22px;
+    border-color: var(--accent);
+    border-style: solid;
+  }
+
+  .img-corner.tl { top: 0; left: 0; border-width: 3px 0 0 3px; }
+  .img-corner.tr { top: 0; right: 0; border-width: 3px 3px 0 0; }
+  .img-corner.bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; }
+  .img-corner.br { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+
+  .img-beam {
+    position: absolute;
+    left: 4%; right: 4%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+    box-shadow: 0 0 14px var(--accent);
+    animation: imgbeam 1.8s ease-in-out infinite;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .img-frame.show .img-beam { opacity: 1; }
+
+  @keyframes imgbeam {
+    0%   { top: 5%; }
+    50%  { top: 90%; }
+    100% { top: 5%; }
+  }
+
+  /* ── BOTTOM PANEL ── */
+  .panel {
+    padding: 20px 20px 24px;
+  }
+
+  /* State messages */
+  .state {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    padding: 8px 0;
+  }
+
+  .state.show { display: flex; }
+
+  /* Idle */
+  #stateIdle p {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+
+  /* Loading */
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #stateLoading p {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* Success */
+  .success-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(74,222,128,0.12);
+    border: 1.5px solid var(--green);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #stateSuccess h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--green);
+  }
+
+  .url-box {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text);
+    word-break: break-all;
+    line-height: 1.5;
+    text-align: left;
+    margin-top: 4px;
+  }
+
+  .countdown {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+
+  .countdown span {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .btn {
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 700;
+  }
+
+  .btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    color: #07070f;
+  }
+
+  .btn.primary:hover { opacity: 0.88; }
+
+  /* Error */
+  .error-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(248,113,113,0.1);
+    border: 1.5px solid var(--warn);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #stateError h3 { font-size: 1rem; font-weight: 700; color: var(--warn); }
+  #stateError p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    max-width: 260px;
+    line-height: 1.5;
+  }
+
+  .btn-retry {
+    margin-top: 4px;
+    padding: 12px 32px;
+    border-radius: 12px;
+    border: 1px solid rgba(248,113,113,0.4);
+    background: transparent;
+    color: var(--warn);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.06em;
+  }
+
+  .btn-retry:hover { background: rgba(248,113,113,0.08); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#07070f" stroke-width="2.2">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <path d="M14 14h3v3h-3zM17 17h3v3h-3zM14 17v3M17 14h3"/>
+    </svg>
+  </div>
+  <h1>QR Scanner</h1>
+  <p>UPLOAD IMAGE → AUTO OPEN URL</p>
+</div>
+
+<div class="card">
+
+  <!-- Drop / Upload zone -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+    <div class="drop-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.8">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <div class="drop-label">Upload QR Code Image</div>
+    <div class="drop-sub">TAP TO BROWSE · OR DRAG & DROP</div>
+  </div>
+
+  <!-- Image preview with scan animation -->
+  <div class="preview-wrap">
+    <img id="previewImg" alt="QR preview">
+    <div class="preview-overlay">
+      <div class="img-frame" id="imgFrame">
+        <div class="img-corner tl"></div>
+        <div class="img-corner tr"></div>
+        <div class="img-corner bl"></div>
+        <div class="img-corner br"></div>
+        <div class="img-beam"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden canvas for decoding -->
+  <canvas id="canvas" style="display:none"></canvas>
+
+  <!-- State panels -->
+  <div class="panel">
+
+    <div class="state show" id="stateIdle">
+      <p>AWAITING IMAGE UPLOAD</p>
+    </div>
+
+    <div class="state" id="stateLoading">
+      <div class="spinner"></div>
+      <p>DECODING QR CODE...</p>
+    </div>
+
+    <div class="state" id="stateSuccess">
+      <div class="success-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h3>QR Code Detected!</h3>
+      <div class="url-box" id="urlBox"></div>
+      <div class="countdown" id="countdown">Redirecting in <span id="secs">3</span>s...</div>
+      <div class="actions">
+        <button class="btn" onclick="copyURL()">COPY URL</button>
+        <button class="btn primary" onclick="goNow()">OPEN NOW</button>
+      </div>
+      <button class="btn" style="width:100%;margin-top:4px;font-size:0.65rem;color:var(--muted)" onclick="reset()">↺ SCAN ANOTHER</button>
+    </div>
+
+    <div class="state" id="stateError">
+      <div class="error-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </div>
+      <h3>No QR Code Found</h3>
+      <p id="errMsg">Couldn't detect a QR code. Try a clearer image with good lighting.</p>
+      <button class="btn-retry" onclick="reset()">TRY AGAIN</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx    = canvas.getContext('2d');
+  let detectedURL = '';
+  let countdownTimer = null;
+
+  // Drag & drop
+  const zone = document.getElementById('dropZone');
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleFile(file);
+  });
+
+  function handleFile(file) {
+    if (!file) return;
+    setState('loading');
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        // Show preview
+        const preview = document.getElementById('previewImg');
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        document.getElementById('imgFrame').classList.add('show');
+
+        // Decode after short delay (shows scanning animation)
+        setTimeout(() => decodeQR(img), 600);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function decodeQR(img) {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
+
+    if (code && code.data) {
+      const data = code.data.trim();
+      if (data.startsWith('http://') || data.startsWith('https://')) {
+        detectedURL = data;
+        document.getElementById('imgFrame').classList.remove('show');
+        showSuccess(data);
+      } else {
+        // Not a URL — still show it but no redirect
+        detectedURL = data;
+        document.getElementById('imgFrame').classList.remove('show');
+        showNonURL(data);
+      }
+    } else {
+      document.getElementById('imgFrame').classList.remove('show');
+      setState('error');
+      document.getElementById('errMsg').textContent =
+        'No QR code detected. Make sure the image is clear, well-lit, and the QR code is fully visible.';
+    }
+  }
+
+  function showSuccess(url) {
+    document.getElementById('urlBox').textContent = url;
+    setState('success');
+
+    // Countdown & auto-redirect
+    let secs = 3;
+    document.getElementById('secs').textContent = secs;
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      secs--;
+      document.getElementById('secs').textContent = secs;
+      if (secs <= 0) {
+        clearInterval(countdownTimer);
+        window.location.href = url;
+      }
+    }, 1000);
+  }
+
+  function showNonURL(data) {
+    // Show data without redirect
+    document.getElementById('urlBox').textContent = data;
+    document.getElementById('countdown').textContent = 'Not a URL — no redirect.';
+    setState('success');
+  }
+
+  function goNow() {
+    clearInterval(countdownTimer);
+    window.location.href = detectedURL;
+  }
+
+  function copyURL() {
+    navigator.clipboard.writeText(detectedURL).then(() => {
+      const btn = event.target;
+      btn.textContent = 'COPIED!';
+      setTimeout(() => btn.textContent = 'COPY URL', 1500);
+    });
+  }
+
+  function reset() {
+    clearInterval(countdownTimer);
+    detectedURL = '';
+    document.getElementById('previewImg').style.display = 'none';
+    document.getElementById('previewImg').src = '';
+    document.getElementById('imgFrame').classList.remove('show');
+    document.getElementById('fileInput').value = '';
+    setState('idle');
+  }
+
+  function setState(s) {
+    ['idle','loading','success','error'].forEach(id => {
+      document.getElementById('state' + id.charAt(0).toUpperCase() + id.slice(1))
+        .classList.toggle('show', id === s);
+    });
+  }
+</script>
+</body>
+</html>
